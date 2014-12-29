@@ -23,12 +23,10 @@ import android.provider.MediaStore;
 import android.support.v7.app.ActionBarActivity;
 import android.util.Log;
 import android.view.Display;
-import android.view.DragEvent;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.View.OnClickListener;
-import android.view.View.OnDragListener;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.Button;
@@ -42,8 +40,9 @@ import android.widget.Toast;
 public class MainActivity extends ActionBarActivity {
 
 	private static final int CAMERA_REQUEST = 1888;
-	private static final int IMAGES_PER_REQUEST = 14;
+	private static final int IMAGES_PER_REQUEST = 27;
 	
+	private RelativeLayout baseLayout;
 	private Button imageButton; 
 	private ImageView imageView;
 	private LinearLayout buttonsLayout;
@@ -53,6 +52,7 @@ public class MainActivity extends ActionBarActivity {
 	private ScrollView scrollView;
 	private int height;
 	private int width;
+	private int imagesProcessedCount = 0;
 	
 	@Override
 	@SuppressLint("NewApi")
@@ -61,12 +61,11 @@ public class MainActivity extends ActionBarActivity {
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
         setContentView(R.layout.activity_main);
+        baseLayout = (RelativeLayout) findViewById(R.id.base_layout);
         
         loadImages();
         
         initViewElements();
-        
-        imageButton.setOnClickListener(Listener());
         
         if (savedInstanceState != null) {
         	if (savedInstanceState.getBoolean("showButtons")) {
@@ -98,38 +97,67 @@ public class MainActivity extends ActionBarActivity {
         buttonsLayout = (LinearLayout) findViewById(R.id.linearLayout);
         imageButton = (Button) findViewById(R.id.capture_button);
         buttonsLayout.setOrientation(LinearLayout.VERTICAL);
+        imageButton.setOnClickListener(Listener());
         initImagesLayout();
         initScrollView();
+	}
+	
+	private void loadMorePictures() throws JSONException {
+		String result = null;
+		try {
+			result = new ImageService().execute().get();
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		} catch (ExecutionException e) {
+			e.printStackTrace();
+		}
+		JSONObject reader = new JSONObject(result);
+		JSONArray array = reader.getJSONArray("entities");
+		
+		for (int i = imagesProcessedCount; i < array.length() && i < imagesProcessedCount + 3; i += 3) {
+			JSONObject[] objects = new JSONObject[3];
+			objects[0] = (JSONObject) array.get(i);
+			if (i + 1 < array.length()) {
+				objects[1] = (JSONObject) array.get(i + 1);	
+			}
+			if (i + 2 < array.length()) {
+				objects[2] = (JSONObject) array.get(i + 2);		
+			}
+			initImagesLayout();
+			processImage(objects);
+			imagesProcessedCount += 3;
+		}
 	}
 
 	@SuppressLint("NewApi")
 	private void initScrollView() {
-		//scrollView = (ScrollView) findViewById(R.id.scrollView1);
+		scrollView = (ScrollView) findViewById(R.id.scrollView1);
+		View v = scrollView.getChildAt(0);
+		scrollView.removeView(v);
 		scrollView = new ScrollView(MainActivity.this) {
 			
 			@Override
 			protected void onScrollChanged(int l, int t, int oldl, int oldt) {
-				Toast.makeText(MainActivity.this, "Helloooo", Toast.LENGTH_SHORT).show();
-				Log.i("AAAAAAAAAAAAAAAAAAAAA", "" + l);
-				//super.onScrollChanged(l, t, oldl, oldt);
+				View view = (View) getChildAt(getChildCount()-1);
+		        int diff = (view.getBottom()-(getHeight()+getScrollY()+view.getTop()));
+		        if(diff == 0){  
+		            try {
+						loadMorePictures();
+					} catch (JSONException e) {
+						e.printStackTrace();
+					}
+		        }
+				super.onScrollChanged(l, t, oldl, oldt);
 			}
-		};
-		
-        RelativeLayout.LayoutParams params = new RelativeLayout.LayoutParams(RelativeLayout.LayoutParams.WRAP_CONTENT, height - 150);
-        params.setMargins(0, 150, 0, 0);
-        scrollView.setLayoutParams(params);
-        scrollView.setOnDragListener(scrollViewListener());
-	}
 
-	@SuppressLint("NewApi")
-	private OnDragListener scrollViewListener() {
-		return new View.OnDragListener() {
-			
-			@Override
-			public boolean onDrag(View v, DragEvent event) {
-				return false;
-			}
 		};
+		scrollView.addView(v);
+		RelativeLayout.LayoutParams params = new RelativeLayout.LayoutParams(RelativeLayout.LayoutParams.WRAP_CONTENT, height - 150);
+		params.setMargins(0, 150, 0, 0);
+
+		scrollView.setLayoutParams(params);
+		
+		baseLayout.addView(scrollView);
 	}
 
 	@SuppressLint("NewApi")
@@ -165,7 +193,7 @@ public class MainActivity extends ActionBarActivity {
 		JSONObject reader = new JSONObject(images);
 		JSONArray array = reader.getJSONArray("entities");
 		
-		for (int i = 0; i < array.length(); i+=3) {
+		for (int i = 0; i < array.length(); i += 3) {
 			if (i > IMAGES_PER_REQUEST) {
 				break;
 			}
@@ -179,6 +207,7 @@ public class MainActivity extends ActionBarActivity {
 			}
 			initImagesLayout();
 			processImage(objects);
+			imagesProcessedCount += 3;
 		}
 	}
 
