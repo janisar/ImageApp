@@ -6,26 +6,25 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import android.annotation.SuppressLint;
-import android.app.AlertDialog;
 import android.app.ActionBar.LayoutParams;
+import android.app.AlertDialog;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.util.Log;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.widget.ImageView;
-import android.widget.LinearLayout;
 
 public class ImageProcessor implements Runnable {
 
-	Context context;
-	JSONObject object;
-	LinearLayout imagesLayout;
-	Thread t;
+	private Context context;
+	private JSONObject object;
+	private Thread t;
+	private volatile ImageView currentImage;
 	
-	public ImageProcessor(Context context, LinearLayout imagesView, JSONObject o) {
+	public ImageProcessor(Context context, JSONObject o) {
 		this.context = context;
-		this.imagesLayout = imagesView;
+		this.currentImage = new ImageView(context);
 		object = o;
 	}
 
@@ -38,7 +37,6 @@ public class ImageProcessor implements Runnable {
 		} catch (JSONException e1) {
 			e1.printStackTrace();
 		}
-		ImageView currentImage = new ImageView(context);
 		try {
 			loadBitmapToImageView(currentImage, imageUrl);
 		} catch (Exception e) {
@@ -52,8 +50,6 @@ public class ImageProcessor implements Runnable {
 		} catch (JSONException e) {
 			e.printStackTrace();
 		}
-		currentImage.setLeft(100);
-		imagesLayout.addView(currentImage, params);
 	}
 	
 	public Bitmap loadBitmapToImageView(ImageView currentImage, String url) throws InterruptedException, ExecutionException {
@@ -78,10 +74,14 @@ public class ImageProcessor implements Runnable {
 		};
 	}
 	
-	public void start () {
+	public void start() {
 		if (t == null) {
 			t = new Thread(this, "Thread");
 	        t.start();
 	    }
+	}
+	
+	public ImageView getCurrentImage() {
+		return currentImage;
 	}
 }

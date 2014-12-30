@@ -15,6 +15,7 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.Bitmap;
+import android.graphics.Color;
 import android.graphics.Point;
 import android.net.Uri;
 import android.os.Bundle;
@@ -62,10 +63,11 @@ public class MainActivity extends ActionBarActivity {
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
         setContentView(R.layout.activity_main);
         baseLayout = (RelativeLayout) findViewById(R.id.base_layout);
-        
-        loadImages();
-        
+        baseLayout.setBackgroundResource(R.drawable.backgroundimage);
+
         initViewElements();
+        ImageLoader imageLoader = new ImageLoader(MainActivity.this, imagesLayout);
+        runOnUiThread(imageLoader);
         
         if (savedInstanceState != null) {
         	if (savedInstanceState.getBoolean("showButtons")) {
@@ -77,18 +79,6 @@ public class MainActivity extends ActionBarActivity {
 				 showImage();
         	}
         }
-	}
-
-	private void loadImages() {
-		try {
-			String images = new ImageService().execute().get();
-			prepare(images);
-		} catch (InterruptedException e) {
-		} catch (ExecutionException e) {
-			e.printStackTrace();
-		} catch (JSONException e) {
-			e.printStackTrace();
-		} 
 	}
 
 	private void initViewElements() {
@@ -171,8 +161,8 @@ public class MainActivity extends ActionBarActivity {
 
 	private void initImagesLayout() {
 		imagesLayout = (LinearLayout) findViewById(R.id.linearLayout2);
-        
-        FrameLayout.LayoutParams imageViewParams = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.MATCH_PARENT);
+
+		FrameLayout.LayoutParams imageViewParams = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.MATCH_PARENT);
         imageViewParams.setMargins((width - (150 * 3)) / 2 - 35, 0, 0, 0);
         imagesLayout.setLayoutParams(imageViewParams);
 	}
@@ -221,7 +211,7 @@ public class MainActivity extends ActionBarActivity {
 		
 		for (JSONObject o : object) {
 			if (o != null) {
-				runOnUiThread(new ImageProcessor(MainActivity.this, horizontal, o));
+				runOnUiThread(new ImageProcessor(MainActivity.this, o));
 			}
 		}
 		initImagesLayout();
