@@ -15,7 +15,7 @@
         android:layout_height="wrap_content"
         android:layout_below="@+id/capture_button"
         android:layout_centerHorizontal="true"
-        android:contentDescription="image preview"/>
+        android:contentDescription="@string/image_preview"/>
 
     <LinearLayout
         android:id="@+id/linearLayout"
@@ -32,12 +32,12 @@
         android:layout_height="50dp"
         android:layout_alignParentTop="true"
         android:layout_centerHorizontal="true"
-        android:text="Tee uus pilt" />
+        android:text="@string/new_picture" />
 
     <ScrollView
         android:id="@+id/scrollView1"
         android:layout_width="fill_parent"
-        android:layout_height="600px"
+        android:layout_height="600dp"
         android:layout_alignLeft="@+id/capture_button"
         android:layout_alignParentBottom="true" >
 

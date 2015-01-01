@@ -1,12 +1,6 @@
 package com.example.imagevrakapp;
 
 import java.io.File;
-import java.util.Date;
-import java.util.concurrent.ExecutionException;
-
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
 
 import android.annotation.SuppressLint;
 import android.app.ActionBar.LayoutParams;
@@ -15,14 +9,12 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.Bitmap;
-import android.graphics.Color;
 import android.graphics.Point;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
 import android.support.v7.app.ActionBarActivity;
-import android.util.Log;
 import android.view.Display;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -38,10 +30,16 @@ import android.widget.RelativeLayout;
 import android.widget.ScrollView;
 import android.widget.Toast;
 
+import com.example.imagevrakapp.core.Entry;
+import com.example.imagevrakapp.form.ImageAddForm;
+import com.example.imagevrakapp.service.web.download.ExtraImagesLoader;
+import com.example.imagevrakapp.service.web.download.ImageLoader;
+import com.example.imagevrakapp.service.web.upload.Uploader;
+
 public class MainActivity extends ActionBarActivity {
 
 	private static final int CAMERA_REQUEST = 1888;
-	private static final int IMAGES_PER_REQUEST = 27;
+	private static final String IMAGE_FILE_NAME = "image.jpg";
 	
 	private RelativeLayout baseLayout;
 	private Button imageButton; 
@@ -53,7 +51,6 @@ public class MainActivity extends ActionBarActivity {
 	private ScrollView scrollView;
 	private int height;
 	private int width;
-	private int imagesProcessedCount = 0;
 	
 	@Override
 	@SuppressLint("NewApi")
@@ -64,10 +61,10 @@ public class MainActivity extends ActionBarActivity {
         setContentView(R.layout.activity_main);
         baseLayout = (RelativeLayout) findViewById(R.id.base_layout);
         baseLayout.setBackgroundResource(R.drawable.backgroundimage);
+        baseLayout.getBackground().setAlpha(150);
 
         initViewElements();
-        ImageLoader imageLoader = new ImageLoader(MainActivity.this, imagesLayout);
-        runOnUiThread(imageLoader);
+        runOnUiThread(new ImageLoader(MainActivity.this, imagesLayout));
         
         if (savedInstanceState != null) {
         	if (savedInstanceState.getBoolean("showButtons")) {
@@ -86,39 +83,11 @@ public class MainActivity extends ActionBarActivity {
 		imageView = (ImageView) findViewById(R.id.imageView1);
         buttonsLayout = (LinearLayout) findViewById(R.id.linearLayout);
         imageButton = (Button) findViewById(R.id.capture_button);
-        buttonsLayout.setOrientation(LinearLayout.VERTICAL);
-        imageButton.setOnClickListener(Listener());
+        imageButton.setOnClickListener(getImageButtonListener());
         initImagesLayout();
         initScrollView();
 	}
 	
-	private void loadMorePictures() throws JSONException {
-		String result = null;
-		try {
-			result = new ImageService().execute().get();
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-		} catch (ExecutionException e) {
-			e.printStackTrace();
-		}
-		JSONObject reader = new JSONObject(result);
-		JSONArray array = reader.getJSONArray("entities");
-		
-		for (int i = imagesProcessedCount; i < array.length() && i < imagesProcessedCount + 3; i += 3) {
-			JSONObject[] objects = new JSONObject[3];
-			objects[0] = (JSONObject) array.get(i);
-			if (i + 1 < array.length()) {
-				objects[1] = (JSONObject) array.get(i + 1);	
-			}
-			if (i + 2 < array.length()) {
-				objects[2] = (JSONObject) array.get(i + 2);		
-			}
-			initImagesLayout();
-			processImage(objects);
-			imagesProcessedCount += 3;
-		}
-	}
-
 	@SuppressLint("NewApi")
 	private void initScrollView() {
 		scrollView = (ScrollView) findViewById(R.id.scrollView1);
@@ -131,11 +100,8 @@ public class MainActivity extends ActionBarActivity {
 				View view = (View) getChildAt(getChildCount()-1);
 		        int diff = (view.getBottom()-(getHeight()+getScrollY()+view.getTop()));
 		        if(diff == 0){  
-		            try {
-						loadMorePictures();
-					} catch (JSONException e) {
-						e.printStackTrace();
-					}
+		            ExtraImagesLoader imageLoader = new ExtraImagesLoader(MainActivity.this, imagesLayout);
+					runOnUiThread(imageLoader);
 		        }
 				super.onScrollChanged(l, t, oldl, oldt);
 			}
@@ -146,7 +112,6 @@ public class MainActivity extends ActionBarActivity {
 		params.setMargins(0, 150, 0, 0);
 
 		scrollView.setLayoutParams(params);
-		
 		baseLayout.addView(scrollView);
 	}
 
@@ -168,7 +133,7 @@ public class MainActivity extends ActionBarActivity {
 	}
 
 	private void showImage() {
-		File takenImage = new File(Environment.getExternalStorageDirectory()  + File.separator + "image.jpg");
+		File takenImage = new File(Environment.getExternalStorageDirectory()  + File.separator + IMAGE_FILE_NAME);
 		Uri outputFileUri = Uri.fromFile(takenImage);
 		imageView.setImageURI(outputFileUri);
 		
@@ -178,73 +143,32 @@ public class MainActivity extends ActionBarActivity {
         scrollView.setLayoutParams(params);
 	}
 
-	private void prepare(String images) throws JSONException {
-		Log.i("MainActivity", images);
-		JSONObject reader = new JSONObject(images);
-		JSONArray array = reader.getJSONArray("entities");
-		
-		for (int i = 0; i < array.length(); i += 3) {
-			if (i > IMAGES_PER_REQUEST) {
-				break;
-			}
-			JSONObject[] objects = new JSONObject[3];
-			objects[0] = (JSONObject) array.get(i);
-			if (i + 1 < array.length()) {
-				objects[1] = (JSONObject) array.get(i + 1);	
-			}
-			if (i + 2 < array.length()) {
-				objects[2] = (JSONObject) array.get(i + 2);		
-			}
-			initImagesLayout();
-			processImage(objects);
-			imagesProcessedCount += 3;
-		}
-	}
-
-	@SuppressLint("NewApi")
-	private void processImage(JSONObject[] object) throws JSONException {
-		LinearLayout horizontal = new LinearLayout(MainActivity.this);
-		horizontal.setOrientation(LinearLayout.HORIZONTAL);
-		LayoutParams layoutParams = new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT);
-		layoutParams.setMargins(200, 0, 0, 0);
-		horizontal.setLayoutParams(layoutParams);
-		
-		for (JSONObject o : object) {
-			if (o != null) {
-				runOnUiThread(new ImageProcessor(MainActivity.this, o));
-			}
-		}
-		initImagesLayout();
-		imagesLayout.addView(horizontal);
-	}
-
-
 	@SuppressLint("NewApi")
 	private void showImageAddButtons() {
         final LinearLayout row = new LinearLayout(this);
         row.setLayoutParams(new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
   
 		Button saveButton = new Button(getApplicationContext());
-		saveButton.setText("Save image");
+		saveButton.setText(getResources().getString(R.string.save_image));
 		saveButton.setOnClickListener(saveButtonListener());
 		Button cancelButton = new Button(getApplicationContext());
-		cancelButton.setText("Forget this image");
+		cancelButton.setText(getResources().getString(R.string.forget_image));
 		row.addView(saveButton);
 		row.addView(cancelButton);
 		buttonsLayout.addView(row);
 	}
 	
-	private OnClickListener Listener() {
+	private OnClickListener getImageButtonListener() {
 		return new View.OnClickListener() {
 			
 			@SuppressLint("NewApi")
 			public void onClick(View v) {
 				showButtons = true;
-				String path = Environment.getExternalStorageDirectory()  + File.separator + "image.jpg";
+				String path = Environment.getExternalStorageDirectory()  + File.separator + IMAGE_FILE_NAME;
 				File file = new File(path);
 				Uri outputFileUri = Uri.fromFile(file);
 
-				Intent intent = new Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE );
+				Intent intent = new Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE);
 				intent.putExtra(MediaStore.EXTRA_OUTPUT, outputFileUri);
 				startActivityForResult(intent, CAMERA_REQUEST); 
 				RelativeLayout.LayoutParams params = new RelativeLayout.LayoutParams(RelativeLayout.LayoutParams.WRAP_CONTENT, height - 300);
@@ -263,36 +187,10 @@ public class MainActivity extends ActionBarActivity {
 	    		@Override
 	    		public void onClick(View v) {
 	    			Context context = MainActivity.this;
-	    			final ImageAddForm relativeLayout = new ImageAddForm(context);
-
+	    			final ImageAddForm imageForm = new ImageAddForm(context);
 	    			AlertDialog alertDialog = new AlertDialog.Builder(context).create();
-	    			alertDialog.setView(relativeLayout);
-	    			alertDialog.setButton(AlertDialog.BUTTON_NEUTRAL, "Salvesta", new DialogInterface.OnClickListener() {
-	                    
-						@SuppressLint("NewApi")
-						public void onClick(DialogInterface dialog, int which) {
-	    					String comment = relativeLayout.getComment().getText().toString();
-	    					String header = relativeLayout.getHeader().getText().toString();
-	    					imageView.buildDrawingCache();
-	    					Bitmap bmap = imageView.getDrawingCache();
-	    					try {
-								String result = new Uploader().execute(new Entry(bmap, comment, header, new Date().toString())).get();
-								imagesLayout.removeAllViewsInLayout();
-								prepare(result);
-							} catch (InterruptedException e) {
-								e.printStackTrace();
-							} catch (ExecutionException e) {
-								e.printStackTrace();
-							} catch (JSONException e) {
-								e.printStackTrace();
-							}  
-	    					showButtons = false;
-	    					showImage = false;
-	    					scrollView.setVisibility(View.VISIBLE);
-	    					imageView.setVisibility(View.INVISIBLE);
-	    					buttonsLayout.setVisibility(View.INVISIBLE);
-	                    }
-	                });
+	    			alertDialog.setView(imageForm);
+	    			alertDialog.setButton(AlertDialog.BUTTON_NEUTRAL, getResources().getString(R.string.save), saveImageButtonListener(imageForm));
 	    			alertDialog.show();
 	    		}
 	    	};
@@ -300,7 +198,7 @@ public class MainActivity extends ActionBarActivity {
 
 		protected void onActivityResult(int requestCode, int resultCode, Intent data) {  
 	    	if (requestCode == CAMERA_REQUEST && resultCode == RESULT_OK) {
-	    		File takenImage = new File(Environment.getExternalStorageDirectory()  + File.separator + "image.jpg");
+	    		File takenImage = new File(Environment.getExternalStorageDirectory()  + File.separator + IMAGE_FILE_NAME);
 	    		Uri outputFileUri = Uri.fromFile(takenImage);
 	    		imageView.setImageURI(outputFileUri);
 	    		showButtons = true;
@@ -308,7 +206,7 @@ public class MainActivity extends ActionBarActivity {
 	    		
 	    		scrollView.setVisibility(View.INVISIBLE);
 	    	} else {
-	    		Toast.makeText(MainActivity.this, "Sorry, couldn't save image, pease try again later." + resultCode, Toast.LENGTH_SHORT).show();
+	    		Toast.makeText(MainActivity.this, getResources().getString(R.string.image_save_error) + resultCode, Toast.LENGTH_SHORT).show();
 	    	}
 	    } 
 
@@ -332,5 +230,32 @@ public class MainActivity extends ActionBarActivity {
 		outState.putBoolean("showButtons", showButtons);
 		outState.putBoolean("showImage", showImage);
 		super.onSaveInstanceState(outState);
+	}
+
+	private android.content.DialogInterface.OnClickListener saveImageButtonListener(
+			final ImageAddForm imageForm) {
+		return new DialogInterface.OnClickListener() {
+		    
+			@SuppressLint("NewApi")
+			public void onClick(DialogInterface dialog, int which) {
+				Entry entry = getEntry(imageForm);
+				new Uploader().execute(entry);
+				imagesLayout.removeAllViewsInLayout();
+				runOnUiThread(new ImageLoader(MainActivity.this, imagesLayout));  
+				showButtons = false;
+				showImage = false;
+				scrollView.setVisibility(View.VISIBLE);
+				imageView.setVisibility(View.INVISIBLE);
+				buttonsLayout.setVisibility(View.INVISIBLE);
+		    }
+		};
+	}
+
+	private Entry getEntry(ImageAddForm imageForm) {
+		String comment = imageForm.getComment().getText().toString();
+		String header = imageForm.getHeader().getText().toString();
+		imageView.buildDrawingCache();
+		Bitmap bmap = imageView.getDrawingCache();
+		return new Entry(bmap, comment, header);
 	}
 }
